@@ -1,0 +1,6 @@
+streamlit>=1.32.0
+numpy>=1.24.0
+# tensorflow-cpu keeps the Streamlit Cloud image small (no CUDA libs).
+# Swap for `tensorflow` if you want GPU support when running locally.
+tensorflow-cpu>=2.15.0
+protobuf>=3.20,<7

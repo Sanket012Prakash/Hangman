@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import List, Optional, Set
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_WORD_FILES = (ROOT / "test_words.txt", ROOT / "train_words.txt")
+DATA_DIR = ROOT / "data"
+MODELS_DIR = ROOT / "models"
+DEFAULT_WORD_FILES = (DATA_DIR / "test_words.txt", DATA_DIR / "train_words.txt")
 MAX_TRIES = 6
 MIN_LEN, MAX_LEN = 3, 30
 
@@ -31,7 +33,7 @@ def load_words(paths: Optional[List[Path]] = None) -> List[str]:
             if cleaned:
                 return cleaned
     raise FileNotFoundError(
-        "No word list found. Place test_words.txt or train_words.txt in the project root."
+        "No word list found. Place test_words.txt or train_words.txt in the data/ folder."
     )
 
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import random
-import shutil
 import string
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -16,7 +15,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
-from game import MAX_TRIES, ROOT, clean_word_list
+from .game import MAX_TRIES, DATA_DIR, MODELS_DIR, clean_word_list
 
 CHAR_TO_IDX = {chr(i + 97): i + 1 for i in range(26)}
 CHAR_TO_IDX["_"] = 27
@@ -25,38 +24,10 @@ VOCAB_SIZE = 28
 MAX_LEN = 30
 HIDDEN_DIM = 256
 
-WEIGHTS_DIR = ROOT / "frontend" / "_weights_cache"
-
 
 def encode_word(word: str, max_len: int = MAX_LEN) -> List[int]:
     enc = [CHAR_TO_IDX.get(c, PAD_IDX) for c in word.lower()]
     return (enc + [PAD_IDX] * max_len)[:max_len]
-
-
-def find_weight_file(keywords_any: List[str], keywords_all: Optional[List[str]] = None) -> Optional[Path]:
-    keywords_all = keywords_all or []
-    for path in ROOT.iterdir():
-        if not path.is_file():
-            continue
-        low = path.name.lower()
-        if not low.endswith(".h5"):
-            continue
-        if not all(k in low for k in keywords_all):
-            continue
-        if keywords_any and not any(k in low for k in keywords_any):
-            continue
-        return path
-    return None
-
-
-def ensure_weights_h5_suffix(src: Path, canonical_name: str) -> Path:
-    WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
-    dst = WEIGHTS_DIR / canonical_name
-    if not str(dst).endswith(".weights.h5"):
-        raise ValueError(f"canonical_name must end with '.weights.h5', got {canonical_name!r}")
-    if src.resolve() != dst.resolve():
-        shutil.copyfile(src, dst)
-    return dst
 
 
 class HangmanBiLSTM(keras.Model):
@@ -301,8 +272,8 @@ def load_word_file(path: Path) -> List[str]:
 
 def load_solver() -> HangmanSolver:
     """Load models + priors. Expensive — cache at app level."""
-    train_path = ROOT / "train_words.txt"
-    test_path = ROOT / "test_words.txt"
+    train_path = DATA_DIR / "train_words.txt"
+    test_path = DATA_DIR / "test_words.txt"
     if not train_path.is_file():
         raise FileNotFoundError(f"Missing {train_path}")
     if not test_path.is_file():
@@ -320,17 +291,16 @@ def load_solver() -> HangmanSolver:
     total_b = sum(bi_cnt.values())
     P_bi = {bg: bi_cnt[bg] / total_b for bg in bi_cnt}
 
-    model_all_src = find_weight_file(keywords_any=["all"], keywords_all=["model"])
-    model_short_src = find_weight_file(keywords_any=["short"], keywords_all=["model"])
-    if model_all_src is None or model_short_src is None:
+    model_all_h5 = MODELS_DIR / "model_all.weights.h5"
+    model_short_h5 = MODELS_DIR / "model_short.weights.h5"
+    if not model_all_h5.is_file() or not model_short_h5.is_file():
         raise FileNotFoundError(
-            "Could not find model_all / model_short .h5 weights in the project root."
+            f"Missing model weights in {MODELS_DIR} "
+            "(expected model_all.weights.h5 and model_short.weights.h5)."
         )
 
-    model_all_h5 = ensure_weights_h5_suffix(model_all_src, "model_all.weights.h5")
-    model_short_h5 = ensure_weights_h5_suffix(model_short_src, "model_short.weights.h5")
-
-    # Reproduce training notebook build order so Keras layer names match saved weights.
+    # Reproduce training notebook build order so Keras auto-generated layer
+    # names line up with what's stored inside the saved .weights.h5 files.
     _warmup = build_model(hidden_dim=HIDDEN_DIM)
     model_all = build_model(hidden_dim=HIDDEN_DIM)
     model_all.load_weights(str(model_all_h5))

@@ -15,8 +15,8 @@ import time
 import streamlit as st
 import streamlit.components.v1 as components
 
-from game import MAX_TRIES
-from solver import GameResult, HangmanSolver, load_solver
+from .game import MAX_TRIES
+from .solver import GameResult, HangmanSolver, load_solver
 
 st.set_page_config(
     page_title="Hangman Solver",
@@ -181,12 +181,13 @@ html, body, [class*="css"] {
 }
 .preview-label { color: #8fa897; letter-spacing: normal; font-size: 0.8rem; display: block; margin-bottom: 0.25rem; }
 
-/* Streamlit text area — hard LTR */
+/* Streamlit text input — force deterministic left-to-right */
 div[data-testid="stTextArea"] textarea,
 div[data-testid="stTextInput"] input {
   direction: ltr !important;
-  unicode-bidi: plaintext !important;
+  unicode-bidi: normal !important;
   text-align: left !important;
+  writing-mode: horizontal-tb !important;
   background: rgba(30, 52, 44, 0.9) !important;
   color: #e8f0ea !important;
   border: 1px solid rgba(143, 168, 151, 0.4) !important;
@@ -242,7 +243,10 @@ div[data-testid="stTextInput"] input {
 </style>
 """
 
-# Injected into parent page so Streamlit's controlled input stays logical LTR
+# Injected into the parent page so the text input is pinned to left-to-right at
+# the DOM-attribute level. `unicode-bidi: normal` (not `plaintext`) is the key
+# fix: `plaintext` lets the browser pick direction from the typed content, which
+# is what made words occasionally appear/register reversed.
 LTR_FIX_JS = """
 <script>
 (function () {
@@ -252,8 +256,9 @@ LTR_FIX_JS = """
     el.setAttribute('dir', 'ltr');
     el.setAttribute('lang', 'en');
     el.style.direction = 'ltr';
-    el.style.unicodeBidi = 'plaintext';
+    el.style.unicodeBidi = 'normal';
     el.style.textAlign = 'left';
+    el.style.writingMode = 'horizontal-tb';
   }
   function scan() {
     doc.querySelectorAll('textarea, input[type="text"]').forEach(forceLtr);
@@ -301,14 +306,10 @@ def pattern_display(pattern: str) -> str:
     return " ".join(pattern)
 
 
-def normalize_word(raw: str, flip: bool = False) -> str:
-    """Strip bidi marks, lowercase; optionally reverse if the field still mirrored."""
+def normalize_word(raw: str) -> str:
+    """Strip bidi control marks, lowercase, and keep letters only for solving."""
     word = (raw or "").translate(BIDI_MARKS).strip().lower()
-    # Keep letters only for solving
-    word = "".join(ch for ch in word if ch.isalpha())
-    if flip:
-        word = word[::-1]
-    return word
+    return "".join(ch for ch in word if ch.isalpha())
 
 
 def render_board(result: GameResult, step_idx: int) -> None:
@@ -442,25 +443,17 @@ def main() -> None:
 
     with tab_custom:
         st.write(
-            "Type the word **left → right** (English letters only). "
-            "Check the preview below — that is exactly what the solver will use."
+            "Type any English word (letters only). "
+            "The preview below is exactly what the solver will use."
         )
-        # text_area is less prone to RTL caret quirks than text_input on some Windows setups
-        custom = st.text_area(
+        custom = st.text_input(
             "Word to solve",
-            placeholder="type here: apple",
+            placeholder="e.g. apple",
             label_visibility="collapsed",
             key="custom_word",
-            height=68,
             disabled=animating,
         )
-        flip = st.checkbox(
-            "Flip letters (use if the preview still looks reversed)",
-            value=False,
-            disabled=animating,
-            key="flip_custom",
-        )
-        word_preview = normalize_word(custom, flip=flip)
+        word_preview = normalize_word(custom)
         st.markdown(
             f'<div class="preview-box"><span class="preview-label">Solver will use</span>'
             f"{word_preview if word_preview else '—'}</div>",
