@@ -58,14 +58,8 @@ html, body, [class*="css"] {
   font-weight: 700;
   letter-spacing: 0.04em;
   color: #f2ebe0;
-  margin: 0 0 0.15rem 0;
-  line-height: 1.1;
-}
-
-.tagline {
-  color: #8fa897;
-  font-size: 0.95rem;
   margin: 0 0 1.5rem 0;
+  line-height: 1.1;
 }
 
 .stage {
@@ -366,7 +360,6 @@ def render_result_banner(result: GameResult) -> None:
 def render_guess_log(result: GameResult, up_to: int) -> None:
     st.markdown("#### Guess log")
     if up_to <= 0:
-        st.caption("Waiting for first guess…")
         return
 
     lines = ['<div class="guess-log">']
@@ -389,7 +382,7 @@ def render_guess_log(result: GameResult, up_to: int) -> None:
 
 def start_solve(word: str) -> None:
     solver: HangmanSolver = st.session_state.solver
-    with st.spinner(f"BiLSTM computing guesses for '{word}'…"):
+    with st.spinner("Solving…"):
         result = solver.play(word)
     st.session_state.result = result
     st.session_state.step_idx = 0
@@ -401,14 +394,9 @@ def main() -> None:
     components.html(LTR_FIX_JS, height=0)
 
     st.markdown('<p class="brand">Hangman Solver</p>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="tagline">BiLSTM + statistical priors guess letter-by-letter '
-        f"(max {MAX_TRIES} wrong tries). Live replay: {STEP_DELAY_SEC:.0f}s per guess.</p>",
-        unsafe_allow_html=True,
-    )
 
     if "solver" not in st.session_state:
-        with st.spinner("Loading BiLSTM models and word priors… (first load may take a minute)"):
+        with st.spinner("Loading…"):
             try:
                 st.session_state.solver = get_solver()
             except Exception as exc:
@@ -423,15 +411,9 @@ def main() -> None:
     solver: HangmanSolver = st.session_state.solver
     animating = bool(st.session_state.animating)
 
-    st.caption(
-        f"Ready — train {len(solver.train_words):,} · "
-        f"test {len(solver.test_words):,} · short pool {len(solver.short_words):,}"
-    )
-
     tab_random, tab_custom = st.tabs(["Random test word", "Custom word"])
 
     with tab_random:
-        st.write("Picks a held-out word from `test_words.txt` and lets the model solve it.")
         if st.button(
             "Solve random test word",
             type="primary",
@@ -442,10 +424,6 @@ def main() -> None:
             st.rerun()
 
     with tab_custom:
-        st.write(
-            "Type any English word (letters only). "
-            "The preview below is exactly what the solver will use."
-        )
         custom = st.text_input(
             "Word to solve",
             placeholder="e.g. apple",
@@ -479,7 +457,6 @@ def main() -> None:
 
     result: GameResult | None = st.session_state.get("result")
     if not result:
-        st.info("Choose a mode above to run the solver.")
         return
 
     n = result.n_guesses
@@ -487,15 +464,12 @@ def main() -> None:
     step_idx = max(0, min(step_idx, n))
 
     st.divider()
-    if animating:
-        st.caption(f"Solving live… guess {step_idx} / {n} (next in {STEP_DELAY_SEC:.0f}s)")
-    else:
+    if not animating:
         step_idx = st.slider(
             "Replay step",
             min_value=0,
             max_value=n,
             value=step_idx,
-            help="0 = blank board, max = final state",
         )
         st.session_state.step_idx = step_idx
 
