@@ -10,55 +10,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-import numpy as np
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers
-
+from .bilstm_numpy import NumpyHangmanBiLSTM, softmax
 from .game import MAX_TRIES, DATA_DIR, MODELS_DIR, clean_word_list
 
 CHAR_TO_IDX = {chr(i + 97): i + 1 for i in range(26)}
 CHAR_TO_IDX["_"] = 27
-PAD_IDX, MASK_IDX = 0, 27
-VOCAB_SIZE = 28
+PAD_IDX = 0
 MAX_LEN = 30
-HIDDEN_DIM = 256
 
 
 def encode_word(word: str, max_len: int = MAX_LEN) -> List[int]:
     enc = [CHAR_TO_IDX.get(c, PAD_IDX) for c in word.lower()]
     return (enc + [PAD_IDX] * max_len)[:max_len]
-
-
-class HangmanBiLSTM(keras.Model):
-    def __init__(self, vocab_size=VOCAB_SIZE, emb_dim=64, hidden_dim=128, num_layers=2, **kwargs):
-        super().__init__(**kwargs)
-        self.embedding = layers.Embedding(vocab_size, emb_dim, mask_zero=True)
-        self.lstm_layers = [
-            layers.Bidirectional(layers.LSTM(hidden_dim, return_sequences=True))
-            for _ in range(num_layers)
-        ]
-        self.classifier = layers.Dense(26)
-
-    def call(self, x, lengths, training=False):
-        mask = self.embedding.compute_mask(x)
-        h = self.embedding(x)
-        for lstm in self.lstm_layers:
-            h = lstm(h, mask=mask, training=training)
-
-        batch_idx = tf.range(tf.shape(h)[0])
-        last_idx = tf.clip_by_value(tf.cast(lengths, tf.int32) - 1, 0, tf.shape(h)[1] - 1)
-        gather_idx = tf.stack([batch_idx, last_idx], axis=1)
-        final = tf.gather_nd(h, gather_idx)
-        return self.classifier(final)
-
-
-def build_model(**kwargs) -> HangmanBiLSTM:
-    model = HangmanBiLSTM(**kwargs)
-    dummy_x = tf.zeros((1, MAX_LEN), dtype=tf.int32)
-    dummy_len = tf.constant([1], dtype=tf.int32)
-    _ = model(dummy_x, dummy_len, training=False)
-    return model
 
 
 def compute_conditional_prior(candidates: List[str]) -> Dict[str, float]:
@@ -112,8 +75,8 @@ class GameResult:
 
 @dataclass
 class HangmanSolver:
-    model_all: keras.Model
-    model_short: keras.Model
+    model_all: NumpyHangmanBiLSTM
+    model_short: NumpyHangmanBiLSTM
     short_words: List[str]
     train_words: List[str]
     test_words: List[str]
@@ -158,10 +121,8 @@ class HangmanSolver:
         ]
 
         net = self.model_all if L > 16 else self.model_short
-        x_in = tf.constant([encode_word(pattern, MAX_LEN)], dtype=tf.int32)
-        l_in = tf.constant([L], dtype=tf.int32)
-        logits = net(x_in, l_in, training=False)
-        probs = tf.nn.softmax(logits, axis=1).numpy()[0]
+        logits = net([encode_word(pattern, MAX_LEN)], [L])
+        probs = softmax(logits, axis=1)[0]
         model_p = {string.ascii_lowercase[i]: float(probs[i]) for i in range(26)}
 
         stat_scores: Dict[str, float] = {}
@@ -299,14 +260,8 @@ def load_solver() -> HangmanSolver:
             "(expected model_all.weights.h5 and model_short.weights.h5)."
         )
 
-    # Reproduce training notebook build order so Keras auto-generated layer
-    # names line up with what's stored inside the saved .weights.h5 files.
-    _warmup = build_model(hidden_dim=HIDDEN_DIM)
-    model_all = build_model(hidden_dim=HIDDEN_DIM)
-    model_all.load_weights(str(model_all_h5))
-    model_short = build_model(hidden_dim=HIDDEN_DIM)
-    model_short.load_weights(str(model_short_h5))
-    del _warmup
+    model_all = NumpyHangmanBiLSTM.from_weights_h5(model_all_h5)
+    model_short = NumpyHangmanBiLSTM.from_weights_h5(model_short_h5)
 
     return HangmanSolver(
         model_all=model_all,

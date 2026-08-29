@@ -44,7 +44,8 @@ Hangman/
 ├── hangman/                  # Core package
 │   ├── __init__.py
 │   ├── game.py               # Hangman rules / word-list loading
-│   ├── solver.py             # BiLSTM model + fused guessing strategy
+│   ├── solver.py             # fused guessing strategy
+│   ├── bilstm_numpy.py       # NumPy BiLSTM inference (no TensorFlow on deploy)
 │   └── ui.py                 # Streamlit interface
 ├── models/
 │   ├── model_all.weights.h5      # BiLSTM for all word lengths
@@ -98,12 +99,17 @@ Then open the URL Streamlit prints (usually `http://localhost:8501`).
 4. Deploy. The model weights (~18 MB total) are committed to the repo, so no extra setup
    is needed.
 
+The live app does **not** install TensorFlow. Community Cloud currently defaults to
+Python 3.14, and `tensorflow-cpu` has no wheels for that ABI. Inference uses NumPy +
+`h5py` against the same Keras `.weights.h5` files. Retrain from the notebooks with a
+local TensorFlow install (Python 3.10–3.13).
+
 ---
 
 ## Tech stack
 
-- **TensorFlow / Keras** — BiLSTM model (`tensorflow-cpu` on deploy).
-- **NumPy** — numeric ops.
+- **NumPy + h5py** — BiLSTM inference from the saved Keras weights.
+- **TensorFlow / Keras** — training only (notebooks; Python 3.10–3.13).
 - **Streamlit** — web UI.
 
 ## Notes
