@@ -426,7 +426,7 @@ def main() -> None:
     with tab_custom:
         custom = st.text_input(
             "Word to solve",
-            placeholder="e.g. apple",
+            placeholder="e.g. placement",
             label_visibility="collapsed",
             key="custom_word",
             disabled=animating,
